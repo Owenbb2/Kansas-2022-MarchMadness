@@ -1,0 +1,319 @@
+---
+title: "ncaahoopR Investigation"
+author: "Owen Brown"
+date: '2022-07-06'
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+## Kansas Jayhawks Regular Season vs March Madness Analysis
+
+The NCAA Division I Men's Basketball tournament, also known as March Madness, is one of the most competitive displays of heart, toughness, and grit in the sport. The selected field of 68 Division I teams battle their way through the bracket with hopes to cement their legacy in the historic tournament. I have accessed play-by-play data from the 2021-2022 season, using RStudio and the R package ncaahoopR.
+
+
+This investigation will focus on the play-by-play data from the 2022 NCAA Division I Men's Basketball Champions, the Kansas Jayhawks.
+
+
+Let's first take a look at shot selection with heat maps in order to get an idea of where the Kansas Jayhawks offense is taking shots during the NCAA tournament. Meanwhile we can examine the game flow and win probability of each game on their road to victory. Later we can break down their offense efficiency into statistics grouped by the different position groups, guards and forwards, with categories for the regular season, march madness, and clutch time.
+
+
+```{r hoops, echo = FALSE, warning = FALSE, message = FALSE}
+library(tidyverse)
+library(ncaahoopR)
+
+Kansaspbp <- ncaahoopR::get_pbp("Kansas", "2021-22")
+Kansaspbp <- as_tibble(Kansaspbp)
+#Texas Southern was the first team that Kansas played in the tournament. So we can find out where to divide our data into regular season and march madness subsets.
+#Kansaspbp %>% filter(home=="Texas Southern" | away=="Texas Southern")
+
+KansasMM<- Kansaspbp %>% filter(date>="2022-03-17")
+KansasRS<- Kansaspbp %>% filter(date<"2022-03-17")
+#Check that first opponent is Texas Southern and last team is UNC
+head(KansasMM)
+tail(KansasMM)
+```
+
+
+## Kansas March Madness Shot Frequency Heat Maps, Win Probability Charts, and Game Flow with Average Score Differential
+```{r, message = FALSE}
+madness<- data.frame(as.numeric(unique(KansasMM$game_id)))
+
+shotmaps<- function(game_id) {
+    maps<- list(game_shot_chart(game_id, heatmap = T),
+                wp_chart_new(game_id, home_col = NULL, away_col = NULL,
+                      include_spread = T), 
+                game_flow(game_id, home_col = "blue", away_col = "red"),
+                average_score_diff(game_id))
+    return(maps)
+}
+
+
+shotmapsMM<- NULL
+opp <- c("Texas Southern", "Creighton", "Providence", "Miami", "Villanova", "North Carolina")
+
+for (i in 1:nrow(madness)){
+  shotmapsMM[[i]]<-shotmaps(madness[i,])
+  shotmapsMM[[i]][[4]] <- data.frame(shotmapsMM[[i]][[4]])
+  rownames(shotmapsMM[[i]][[4]]) <- "avg_point_diff"
+  names(shotmapsMM[[i]][[4]]) <- opp[i]
+}
+```
+
+
+
+## Texas Southern
+```{r}
+shotmapsMM[[1]]
+```
+
+
+Each figure tells the same story here, perhaps the 19.83 average score differential is the most jarring. Kansas steam rolled Texas Southern from the start and the win probability chart shows the approach of a guaranteed Jayhawk victory.
+
+
+## Creighton
+```{r}
+shotmapsMM[[2]]
+```
+
+
+My greatest surprise here was looking at the win probability chart and thinking Kansas performed in the same manner as they did against Texas Southern, and then seeing the game flow and average score differential. While the Jayhawks maintained a win probability of more than 75% for the duration of the game, the Bluejays put up a tremendous effort, shooting many threes, and stayed on the number one seed's tail up until clutch time.
+
+
+## Providence
+```{r}
+shotmapsMM[[3]]
+```
+
+
+Kansas kept an extra possession of cushion compared to the previous game against Creighton, but like the previous match-up, Providence stayed with the Jayhawks and even pulled ahead for one point with about seven minutes to play. This momentum change frightened Kansas fans for a bit and is reflected on the win probability chart, which we can see is more pronounced than the close game against Creighton.
+
+
+## Miami
+```{r}
+shotmapsMM[[4]]
+```
+
+
+The Kansas Jayhawks appear to have had some strong displays of domination and closing out close games in the tournament with maintaining a high win probability throughout several march madness contests. Here against Miami is where we see the first game in which Kansas was not favored to win at a given point, right before and after halftime. The Jayhawks did not take kindly to this and pulled away steadily in the second half.
+
+
+## Villanova
+```{r}
+shotmapsMM[[5]]
+```
+
+
+It is surprising to see a chart that resembles the first game against Texas Southern here in the Final Four. Kansas spread out in the high paint and beyond the arc but not enough threes fell for Villanova. With a double digit average score differential, the Wildcats didn't have a single lead in this basketball game.
+
+
+## North Carolina
+```{r}
+shotmapsMM[[6]]
+```
+
+
+
+Kansas stuck to their game plan and got to the basket in the championship game against the North Carolina Tar Heels. The Jayhawks didn't shoot as many threes as their opponent in the game despite having trailed for a significant stretch and having a negative average score differential! The DNA-shaped game flow chart and sinusoidal-looking win probability chart are evidence that the championship game certainly lived up to the excitement.
+
+
+My thoughts after seeing these heat maps of shot frequency are that the Jayhawks seem to get most of their buckets in the paint, specifically right at the hoop. Their opponents tend to shoot more three pointers indicated by the yellow and orange highlights beyond the arc, where Kansas' heat maps are not as pronounced in that area. Perhaps this is due to Kansas' opponents playing from behind in most of their tournament match-ups, aside from Miami and UNC.
+
+
+
+## Regular Season VS March Madness: Shooting Efficiency by position
+```{r}
+#Organization
+library(tidyverse)
+library(ncaahoopR)
+Kansas_RS_averages <- season_boxscore("Kansas", season = "2021-22", aggregate = 'average')
+Kansas_RS_raw <- season_boxscore("Kansas", season = "2021-22", aggregate = 'raw')
+
+
+positions_by_game <- Kansas_RS_raw %>% 
+  group_by(game_id, position) %>% 
+  summarise(fg_pct = ifelse(sum(FGA)>0,
+                            sum(FGM)/sum(FGA),
+                            NA),
+            three_point_pct = ifelse(sum(`3PTA`)> 0,
+                                     sum(`3PTM`)/sum(`3PTA`), 
+                                     NA),
+            ft_pct = ifelse(sum(FTA)>0,
+                            sum(FTM)/sum(FTA),
+                            NA),
+            total_points = sum(PTS),
+            total_rebounds = sum(REB),
+            total_assists = sum(AST),
+            total_steals = sum(STL),
+            total_blocks = sum(BLK),
+            total_turnovers = sum(TO))
+
+Schedule <- get_schedule("Kansas", "2021-22")
+positions_by_game <- Schedule %>% 
+  left_join(positions_by_game, by = "game_id") %>% 
+  arrange(date)
+```
+
+
+## Shooting Analysis
+
+## Shooting Regular Season
+```{r}
+  #FG%: Facet Wrap
+positions_by_game %>% filter(date < "2022-03-17") %>% 
+  ggplot(aes(x = date, 
+             y = fg_pct, 
+             color = position)) + 
+  geom_point() + facet_wrap(~position) + geom_smooth()
+  #FG%: No Facet Wrap
+positions_by_game %>% filter(date < "2022-03-17") %>% 
+  ggplot(aes(x = date, 
+             y = fg_pct, 
+             color = position)) + 
+  geom_point() + geom_smooth()
+  #3PT%
+positions_by_game %>% filter(date < "2022-03-17") %>% 
+  ggplot(aes(x = date, 
+             y = three_point_pct, 
+             color = position)) + 
+  geom_point() + facet_wrap(~position) + geom_smooth()
+
+RS_shooting_avgs <- positions_by_game %>% 
+  filter(date < "2022-03-17") %>% group_by(position) %>% 
+  summarise(avg_fg_pct = mean(fg_pct),
+            avg_3pt_pct = mean(three_point_pct, na.rm = TRUE),
+            avg_ft_pct = mean(ft_pct))
+```
+
+
+
+We can see here how the Kansas team fluctuated in shooting percentage throughout the regular season. I thought the first graph looked interesting and wanted to see both guards and forwards overlapped on the same plot. As I expected I saw a fascinating looking trend for the majority of the regular season. The field goal percentage smoother lines almost mimic the opposite of each other-- which can be interpreted as the two position groups picking up each others slack when needed. This also shows the versatility of the Kansas roster, they can play a big game with their forwards if they need to, and if they aren't playing well, let the guards play the smaller game. 
+
+
+At the start of the season, the guards (blue points) are almost all above the forwards (orange points). Then, in late December, it flips, where the forwards are playing more efficiently with their shots compared to the guards. Lastly, we see the percentages level out in the 40-60% range.
+
+
+When we look at three point percentage it is the tale of the stereotypical position strengths, the forwards are all over the place from 0% to 100%, which is probably contributed to them taking fewer threes. The guards are consistent from three and have less variation than the forwards. The guards shoot between 25-50% from downtown on average.
+
+
+
+## Shooting March Madness
+```{r}
+  #FG%: Facet Wrap
+positions_by_game %>% filter(date >= "2022-03-17") %>% 
+  ggplot(aes(x = date, 
+             y = fg_pct, 
+             color = position)) + 
+  geom_point() + facet_wrap(~position) + geom_line()
+  #FG%: No Facet Wrap
+positions_by_game %>% filter(date >= "2022-03-17") %>% 
+  ggplot(aes(x = date, 
+             y = fg_pct, 
+             color = position)) + 
+  geom_point() + geom_line()
+  #3PT%
+positions_by_game %>% filter(date >= "2022-03-17") %>% 
+  ggplot(aes(x = date, 
+             y = three_point_pct, 
+             color = position)) + 
+  geom_point() + facet_wrap(~position) + geom_line()
+
+MM_shooting_avgs <- positions_by_game %>% 
+  filter(date >= "2022-03-17") %>% group_by(position) %>% 
+  summarise(avg_fg_pct = mean(fg_pct),
+            avg_3pt_pct = mean(three_point_pct, na.rm = TRUE),
+            avg_ft_pct = mean(ft_pct))
+```
+
+
+
+We are seeing another interesting result in the six March Madness games that Kansas played. For the first three games, the guards shot more efficiently, and for the last three games, the forwards shot more efficiently. Because Kansas won the championship game, we know that each of these games resulted in a victory. This similar trend as before hints toward the fact that Kansas isn't a one dimensional team. They don't need to rely on their forwards every game or their guards every game, they can play big or they can play small, depending on the opponent. As for three point percentage, forwards ranged from 0-40%, and the guards were converting on 40-60% of their opportunities, with one poor game against Providence where they converted on less than one in ten shots.
+
+
+
+## Regular Season vs March Madness shooting differentials
+```{r}
+shooting_changes <- data.frame(MM_shooting_avgs[,2] - RS_shooting_avgs[,2], 
+           MM_shooting_avgs[,3] - RS_shooting_avgs[,3], 
+           MM_shooting_avgs[,4] - RS_shooting_avgs[,4])
+
+names(shooting_changes) = c("mad_fg_pct_change",
+                         "mad_3pt_pct_change",
+                         "mad_ft_pct_change")
+```
+
+## Regular Season Averages
+```{r}
+RS_shooting_avgs
+```
+## March Madness Averages
+```{r}
+MM_shooting_avgs
+```
+
+## Regular Season to March Madness Shooting Changes
+```{r}
+library(dplyr)
+rownames(shooting_changes) <- c("F", "G")
+shooting_changes <- shooting_changes %>% add_rownames(var = "position")
+shooting_changes
+```
+
+
+
+
+From our table it is clear to see how the Kansas player positions both flourished and regressed in the NCAA March Madness tournament. Field goal percentage did not change too much for the guards, but the forwards saw less buckets from their opportunities. While three point shooting fell 10% for the forwards, the guards shot the three ball quite well in the six game stretch, a 7.7% improvement. Free throws during march madness certainly require mental toughness, and the Jayhawk forwards showed just that converting 75% of their free throws, an 11% increase from the regular season. On the other hand, the guards struggled with an abysmal 57% from the charity stripe compared to their strong 77% make rate in the regular season.
+
+
+This last table further emphasizes the versatile teamwork of the Kansas Jayhawks. None of these columns in the percent difference chart show two positives or two negatives, in other words, where the forwards regressed, the guards improved, and vice-versa.
+
+
+
+## Clutch Time Shooting
+```{r}
+library(tidyverse)
+library(ncaahoopR)
+clutchfts <- Kansaspbp %>% 
+  filter(secs_remaining_absolute < 121, 
+         abs(score_diff) < 11, 
+         !is.na(shot_team),
+         free_throw == TRUE) %>% 
+  mutate(Madness = ifelse(date >= "2022-03-17", TRUE, FALSE)) %>% 
+  group_by(Madness, game_id, shot_team, shot_outcome) %>% 
+  summarise(Shots = n()) %>% pivot_wider(names_from = shot_outcome, values_from = Shots)
+
+clutchfts[is.na(clutchfts)] = 0
+clutchfts <- clutchfts %>% filter(shot_team == "Kansas") %>% 
+  group_by(Madness) %>% 
+  summarise(`Clutch FT%` = sum(made)/sum(made, missed))
+
+clutchfgs <- Kansaspbp %>% 
+  filter(secs_remaining_absolute < 121, 
+         abs(score_diff) < 11, 
+         !is.na(shot_team),
+         free_throw == FALSE) %>% 
+  mutate(Madness = ifelse(date >= "2022-03-17", TRUE, FALSE)) %>% 
+  group_by(Madness, game_id, shot_team, shot_outcome) %>% 
+  summarise(Shots = n()) %>% pivot_wider(names_from = shot_outcome, values_from = Shots)
+
+clutchfgs[is.na(clutchfgs)] = 0
+clutchfgs <- clutchfgs %>% filter(shot_team == "Kansas") %>% 
+  group_by(Madness) %>% 
+  summarise(`Clutch FG%` = sum(made)/sum(made, missed))
+
+clutchfts
+clutchfgs
+```
+
+
+
+The statistics above are clutch free throw percentages and clutch field goal percentages for the Jayhawks, which is defined as baskets made during the final 2 minutes of the game. We are comparing their clutch shooting percentages before and during the Madness. It looks like the stakes of elimination and the pressure of being a number one seed fueled the Kansas Jayhawks as their clutch FT% increased by about 2% and clutch FG% increased by almost 8%, shooting nearly 43% as a team in crunch time. It appears when the going got tough and the pressure turned on in the NCAA Division I Men's College Basketball tournament, the Kansas Jayhawks were able to make clutch free throws and clutch shots for their team.
+
+
+Our investigation of the NCAA Division I Men's College Basketball tournament champions, the Kansas Jayhawks, supports the same criteria of their team which earned them their selection of being a number one seed in the tournament. They play efficiently as a team and they stick to their game plan of getting close shots, as shown by the shooting percentages and similar heat maps controlling the inside. Finally, Kansas was able to use their shooting efficiency and versatile offense to fight back into the championship game against the Tar Heels. The Kanas Jayhawks closed out the opponent in clutch time like they had in the five elimination games prior to earn themselves the title of 2022 March Madness Champions.
+
+
